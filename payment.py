@@ -1,15 +1,10 @@
 class Payment:
 
-    status
-
-    def __init__(self, api):
-        self.api = api
-
     def get_api(self):
-        return self.api
+        pass
 
-    def get_status():
-        return status
+    def get_status(self):
+        pass
 
     def process(self):
-        status = self.api.run_payment_process()
+        pass
