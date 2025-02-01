@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import time
 from datetime import datetime
@@ -11,14 +12,18 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 from payment import Payment
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--settings', dest='settings', type=str, help='Specify settings file path')
+args = parser.parse_args()
+
 config = configparser.ConfigParser()
-config.read("settings.ini")
+config.read(args.settings)
 host = config["MRZBN"]["ENDPOINT"]
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-logging.getLogger("httpx").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 marzban_api = MarzbanAPI(base_url=host)
@@ -31,7 +36,7 @@ async def get_token():
 
 async def check_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     token = await get_token()
-    user_id = str(context.user_data)
+    user_id = str(context._user_id)
     user_info = await marzban_api.get_user(username=user_id, token=token.access_token)
     await update.message.reply_text(user_info.status)
 
@@ -77,8 +82,16 @@ async def create_user(context: ContextTypes.DEFAULT_TYPE) -> None:
         added_user = await marzban_api.add_user(user=new_user, token=token.access_token)
 
 
+async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    token = await get_token()
+    user_id = str(context._user_id)
+    await marzban_api.remove_user(username=user_id, token=token.access_token)
+    await update.message.reply_text("Removed acc!")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f'Hello {update.effective_user.first_name}! \
+    await update.message.reply_text(f' \
+        Hello {update.effective_user.first_name}! \
         What would you like to do? \
         1. Pay: /pay \
         2. Check sub time: /expire \
@@ -92,4 +105,5 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("pay", pay))
     app.add_handler(CommandHandler("status", check_user_status))
     app.add_handler(CommandHandler("expire", check_user_expiration_time))
+    app.add_handler(CommandHandler("remove", remove_user))
     app.run_polling()
