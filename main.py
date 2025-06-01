@@ -134,7 +134,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(context._chat_id)
     code = str(random.randint(0, 999999)).zfill(6) # gen random code
     p_user_tasks.append({"id": user_id, "chat": chat_id, "code": code, "status": NEW})
-    await update.message.reply_text(f'Payment process: \n Send $ to card {card_number} with code `{code}` in description \n Then wait for admin approval\\!', parse_mode=parse_mode)
+    await update.message.reply_text(f'Payment process: \n Send $ to card `{card_number}` with code `{code}` in description \n Then wait for admin approval\\!', parse_mode=parse_mode)
     await manage_payment(app=context)
 
 
