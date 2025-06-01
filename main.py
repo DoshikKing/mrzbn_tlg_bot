@@ -1,5 +1,4 @@
 import argparse
-import schedule
 import asyncio
 import time
 from datetime import datetime
@@ -33,9 +32,9 @@ marz_token = MarzbanTokenCache(
     )
 
 admin = {"id": config["ADMIN"]["ID"], "chat": config["ADMIN"]["CHAT"]}
-card_number = "3123213213213123"
+card_number = config["CARD"]["NUM"]
 
-NEW, PROCESSING, DONE = range(3)
+NEW, PROCESSING = range(2)
 
 p_user_tasks = []
 
@@ -49,26 +48,27 @@ async def check_and_get_user(user_id: str):
         return await api.get_user(username=user_id, token=await marz_token.get_token())
     except:
         logger.error("No user with id %s", user_id, exc_info=True)
+        return None
 
 
 # Updates user via mod_data and returns status
 async def update_user_ex_time(user_id: str, mod_data:UserModify):
     try:
-        if check_and_get_user(user_id=user_id) is not None:
+        if await check_and_get_user(user_id=user_id) is not None:
             return await api.modify_user(username=user_id, user=mod_data, token=await marz_token.get_token())
     except:
-        logger.error("Cant update user with id %s", user_id, exc_info=True)
+        logger.error('Cant update user with id %s', user_id, exc_info=True)
 
 
 # Creates new user with user_id
 async def create_new_user(user_id: str):
     try:
-        if check_and_get_user(user_id=user_id) is None:
+        if await check_and_get_user(user_id=user_id) is None:
             expiration_time = calendar.timegm((datetime.now() + monthdelta(1)).timetuple()) # 28 days.. need to fix
             new_user = UserCreate(username=user_id, expire=expiration_time, proxies={"vless": ProxySettings()}, inbounds={'vless': ['VLESS TCP REALITY']})
             return await api.add_user(user=new_user, token=await marz_token.get_token())
     except:
-        logger.error("No user with id %s", user_id, exc_info=True)
+        logger.error('No user with id %s', user_id, exc_info=True)
 
 # Deletes user by user_id
 async def remove_ex_user(user_id: str):
@@ -78,14 +78,40 @@ async def remove_ex_user(user_id: str):
 ##########################################################################################################################
 #                                                    Bot commands                                                        #
 ##########################################################################################################################
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        f'Hello {update.effective_user.first_name}!\n\
+        What would you like to do?\n\
+        1. Pay: /pay\n\
+        2. Check sub time: /expire\n\
+        3. Check sub status: /status\n\
+        4. Get sub link: /link\n\
+        5. Get help: /help\n'
+    )
+
+
 async def check_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_info = await check_and_get_user(user_id=str(context._user_id))
-    await update.message.reply_text(user_info.status)
+    if user_info is not None:
+        await update.message.reply_text(user_info.status)
+    else:
+        await update.message.reply_text('Can\'t find your account! Maybe it\'s expired?')
 
 
 async def check_user_expiration_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_info = await check_and_get_user(user_id=str(context._user_id))
-    await update.message.reply_text(str(datetime.fromtimestamp(int(user_info.expire))))
+    if user_info is not None:
+        await update.message.reply_text(str(datetime.fromtimestamp(int(user_info.expire))))
+    else:
+        await update.message.reply_text('Can\'t find your account! Maybe you didn\'t have one yet?')
+
+
+async def get_sub_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_info = await check_and_get_user(user_id=str(context._user_id))
+    if user_info is not None:
+        await update.message.reply_text(config["MRZBN"]["ENDPOINT"] + user_info.subscription_url)
+    else:
+        await update.message.reply_text('Can\'t find your account! Maybe it\'s expired?')
 
 
 async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -93,12 +119,20 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(context._chat_id)
     code = str(random.randint(0, 999999)).zfill(6) # gen random code
     p_user_tasks.append({"id": user_id, "chat": chat_id, "code": code, "status": NEW})
-    await update.message.reply_text(f' \
-        Payment process: \
-        Send $ to card {card_number} with code in description {code} \
-        Then wait for admin approval! \
-    ')
+    await update.message.reply_text(f'Payment process: \n Send $ to card {card_number} with code in description {code} \n Then wait for admin approval!')
     await manage_payment(app=context)
+
+
+async def helpf(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        f'How to use MarzbanVPN?\n\
+        1. First go to client donwload page: https://github.com/hiddify/hiddify-app/releases\n\
+        2. Download version for your OS\n\
+        3. Install client\n\
+        4. Copy link which you get after payment (If you forget it than check it with /link !)\n\
+        5. In main menu of the client press \'+\' icon and choose \'Add from clip board\'\n\
+        6. After that press big button and you good to go!'
+    )
 
 
 async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -114,29 +148,19 @@ async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'Stats: {p_user_tasks}')
 
 
-async def info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(f' \
-        Hello {update.effective_user.first_name}! \
-        What would you like to do? \
-        1. Pay: /pay \
-        2. Check sub time: /expire \
-        3. Check sub status: /status \
-    ')
-
-
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.info("approve() >> I GOT HERE!")
     if str(context._user_id) == admin["id"]:
         for user_task in p_user_tasks:
-            logger.info(f"approve() >> I GOT HERE! {user_task["status"]}")
-            if user_task["code"] == update.message.text and user_task["status"] == PROCESSING:
-                if check_and_get_user(user_id=user_task["id"]) is None:
-                    await create_new_user(user_id=user_task["id"])
+            if user_task["code"] == str(update.message.text) and user_task["status"] == PROCESSING:
+                user_id = user_task["id"]
+                user = check_and_get_user(user_id=user_id)
+                if await user is None:
+                    user = await create_new_user(user_id=user_id)
                 else:
                     expiration_time = calendar.timegm((datetime.now() + monthdelta(1)).timetuple()) # 28 days bag
-                    await update_user_ex_time(user_id=user_task["id"], mod_data=UserModify(expire=expiration_time))
-                user_task["status"] = DONE
-                await context.bot.send_message(user_task["chat"], 'Admin approved your transaction! Enjoy!')
+                    await update_user_ex_time(user_id=user_id, mod_data=UserModify(expire=expiration_time))
+                await context.bot.send_message(user_task["chat"], f'Admin approved your transaction! Here\'s your connection link: {config["MRZBN"]["ENDPOINT"] + user.subscription_url} Enjoy!')
+                p_user_tasks.remove(user_task)
             else:
                 await context.bot.send_message(admin["chat"], 'Wrong code!')
 
@@ -147,19 +171,20 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def manage_payment(app: ContextTypes.DEFAULT_TYPE):
     for user_task in p_user_tasks:
         if (user_task["status"] == NEW):
-            # not updating
             user_task["status"] = PROCESSING
             await app.bot.send_message(admin["chat"], f'User {user_task["id"]} payed with code {user_task["code"]}. Type code to permit..')
 
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(config["TELEGRAM"]["TOKEN"]).build()
-    app.add_handler(CommandHandler("info", info))
+    app.add_handler(CommandHandler("start", info))
     app.add_handler(CommandHandler("pay", pay))
     app.add_handler(CommandHandler("status", check_user_status))
     app.add_handler(CommandHandler("expire", check_user_expiration_time))
     app.add_handler(CommandHandler("remove", remove_user))
-    app.add_handler(CommandHandler("inf", get_chat_info))
-    app.add_handler(CommandHandler("gts", get_stats))
+    app.add_handler(CommandHandler("link", get_sub_link))
+    app.add_handler(CommandHandler("help", helpf))
+    #app.add_handler(CommandHandler("/inf", get_chat_info))
+    #app.add_handler(CommandHandler("gts", get_stats))
     app.add_handler(MessageHandler(filters.TEXT, approve))
     app.run_polling()
