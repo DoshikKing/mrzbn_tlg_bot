@@ -8,6 +8,7 @@ import logging
 import random
 from marzban import MarzbanAPI, UserCreate, ProxySettings, UserModify, MarzbanTokenCache
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 utc_plus_3 = timezone(timedelta(hours=3))
@@ -39,6 +40,7 @@ NEW, PROCESSING = range(2)
 
 p_user_tasks = []
 
+parse_mode = ParseMode.MARKDOWN_V2
 
 ##########################################################################################################################
 #                                                    MRZB commands                                                       #
@@ -122,7 +124,7 @@ async def check_user_expiration_time(update: Update, context: ContextTypes.DEFAU
 async def get_sub_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_info = await check_and_get_user(user_id=str(context._user_id))
     if user_info is not None:
-        await update.message.reply_text(config["MRZBN"]["ENDPOINT"] + user_info.subscription_url)
+        await update.message.reply_text(f'Your link is `{config["MRZBN"]["ENDPOINT"] + user_info.subscription_url}`', parse_mode=parse_mode)
     else:
         await update.message.reply_text('Can\'t find your account! Maybe it\'s expired?')
 
@@ -132,7 +134,7 @@ async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(context._chat_id)
     code = str(random.randint(0, 999999)).zfill(6) # gen random code
     p_user_tasks.append({"id": user_id, "chat": chat_id, "code": code, "status": NEW})
-    await update.message.reply_text(f'Payment process: \n Send $ to card {card_number} with code in description {code} \n Then wait for admin approval!')
+    await update.message.reply_text(f'Payment process: \n Send $ to card {card_number} with code `{code}` in description \n Then wait for admin approval\\!', parse_mode=parse_mode)
     await manage_payment(app=context)
 
 
@@ -171,7 +173,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     user = await create_new_user(user_id=user_id)
                 else:
                     await update_user_ex_time(user_id=user_id)
-                await context.bot.send_message(user_task["chat"], f'Admin approved your transaction! Here\'s your connection link: {config["MRZBN"]["ENDPOINT"] + user.subscription_url} Enjoy!')
+                await context.bot.send_message(user_task["chat"], f'Admin approved your transaction\\! Here\'s your connection link `{config["MRZBN"]["ENDPOINT"] + user.subscription_url}`\nEnjoy\\!', parse_mode=parse_mode)
                 p_user_tasks.remove(user_task)
             else:
                 await context.bot.send_message(admin["chat"], 'Wrong code!')
@@ -184,7 +186,7 @@ async def manage_payment(app: ContextTypes.DEFAULT_TYPE):
     for user_task in p_user_tasks:
         if (user_task["status"] == NEW):
             user_task["status"] = PROCESSING
-            await app.bot.send_message(admin["chat"], f'User {user_task["id"]} payed with code {user_task["code"]}. Type code to permit..')
+            await app.bot.send_message(admin["chat"], f'User {user_task["id"]} payed with code `{user_task["code"]}`\\. Type code to permit\\.\\.', parse_mode=parse_mode)
 
 
 if __name__ == '__main__':
