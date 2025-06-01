@@ -1,14 +1,16 @@
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import calendar
 from monthdelta import monthdelta
 import configparser
 import logging
 import random
 from marzban import MarzbanAPI, UserCreate, ProxySettings, UserModify, MarzbanTokenCache
-from telegram import Update
+from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+
+utc_plus_3 = timezone(timedelta(hours=3))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--settings', dest='settings', type=str, help='Specify settings file path')
@@ -51,10 +53,13 @@ async def check_and_get_user(user_id: str):
 
 
 # Updates user via mod_data and returns status
-async def update_user_ex_time(user_id: str, mod_data:UserModify):
+async def update_user_ex_time(user_id: str):
     try:
-        if await check_and_get_user(user_id=user_id) is not None:
-            return await api.modify_user(username=user_id, user=mod_data, token=await marz_token.get_token())
+        user = await check_and_get_user(user_id=user_id)
+        if user is not None:
+            start_time_point = datetime.fromtimestamp(time.mktime(time.gmtime(user.expire))) if user.expire is not None else datetime.now(utc_plus_3)
+            expiration_time = calendar.timegm((start_time_point + monthdelta(1)).timetuple())
+            return await api.modify_user(username=user_id, user=UserModify(expire=expiration_time), token=await marz_token.get_token())
     except:
         logger.error('Cant update user with id %s', user_id, exc_info=True)
 
@@ -63,7 +68,7 @@ async def update_user_ex_time(user_id: str, mod_data:UserModify):
 async def create_new_user(user_id: str):
     try:
         if await check_and_get_user(user_id=user_id) is None:
-            expiration_time = calendar.timegm((datetime.now() + monthdelta(1)).timetuple()) # 28 days.. need to fix
+            expiration_time = calendar.timegm((datetime.now() + monthdelta(1)).timetuple())
             new_user = UserCreate(username=user_id, expire=expiration_time, proxies={"vless": ProxySettings()}, inbounds={'vless': ['VLESS TCP REALITY']})
             return await api.add_user(user=new_user, token=await marz_token.get_token())
     except:
@@ -78,6 +83,14 @@ async def remove_ex_user(user_id: str):
 #                                                    Bot commands                                                        #
 ##########################################################################################################################
 async def info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    kb = [[
+        KeyboardButton('/pay'), 
+        KeyboardButton('/status'),
+        KeyboardButton('/expire'),
+        KeyboardButton('/link'),
+        KeyboardButton('/help')
+    ]]
+    kb_markup = ReplyKeyboardMarkup(kb, resize_keyboard=True)
     await update.message.reply_text(
         f'Hello {update.effective_user.first_name}!\n\
         What would you like to do?\n\
@@ -85,7 +98,8 @@ async def info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         2. Check sub time: /expire\n\
         3. Check sub status: /status\n\
         4. Get sub link: /link\n\
-        5. Get help: /help\n'
+        5. Get help: /help\n', 
+        reply_markup=kb_markup
     )
 
 
@@ -152,12 +166,11 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         for user_task in p_user_tasks:
             if user_task["code"] == str(update.message.text) and user_task["status"] == PROCESSING:
                 user_id = user_task["id"]
-                user = check_and_get_user(user_id=user_id)
-                if await user is None:
+                user = await check_and_get_user(user_id=user_id)
+                if user is None:
                     user = await create_new_user(user_id=user_id)
                 else:
-                    expiration_time = calendar.timegm((datetime.now() + monthdelta(1)).timetuple()) # 28 days bag
-                    await update_user_ex_time(user_id=user_id, mod_data=UserModify(expire=expiration_time))
+                    await update_user_ex_time(user_id=user_id)
                 await context.bot.send_message(user_task["chat"], f'Admin approved your transaction! Here\'s your connection link: {config["MRZBN"]["ENDPOINT"] + user.subscription_url} Enjoy!')
                 p_user_tasks.remove(user_task)
             else:
