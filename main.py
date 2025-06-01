@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 import time
 from datetime import datetime
 import calendar
@@ -8,8 +7,8 @@ import configparser
 import logging
 import random
 from marzban import MarzbanAPI, UserCreate, ProxySettings, UserModify, MarzbanTokenCache
-from telegram import Update, MenuButton
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, ConversationHandler, MessageHandler, ContextTypes, filters
+from telegram import Update
+from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--settings', dest='settings', type=str, help='Specify settings file path')
