@@ -1,4 +1,4 @@
-# Telegram bot for Marzban VPN managment!
+# Telegram bot for Marzban VPN management!
 
 # INFO
 Lets you manage your Marzban instance using Telegram bot
@@ -32,12 +32,12 @@ Options:
 ```shell
 pip install -r requirements.txt
 ``` 
-and launch [main.py](main.py) like
+and launch [main.py](src/main.py) like
 ```shell
 python main.py --settings YOUR_SETTINGS_FILE
 ``` 
 2. Build docker image from [Dockerfile](Dockerfile) and run like
 ```shell
-docker build -t boatapp:v1 .
+docker build -t botapp:v1 .
 docker run -p 8080:80 boatapp:v1
 ``` 
