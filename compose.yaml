@@ -1,0 +1,24 @@
+version: "3"
+volumes:
+  data:
+  export:
+services:
+  bot-app:
+    image: localhost/bot:v1.0.nf-1-test
+    container_name: bot-app
+    ports:
+      - 8080:80
+    restart: unless-stopped
+#  postgres-sql-eval:
+#    image: docker.io/postgres:14-alpine
+#    container_name: postgres-sql-eval
+#    ports:
+#      - 5432:5432
+#    environment:
+#      - POSTGRES_PASSWORD=postgres
+#    volumes:
+#      - data:/var/lib/postgresql/data
+#      - export:/export
+#    depends_on:
+#      - bot-app
+#    restart: on-failure
