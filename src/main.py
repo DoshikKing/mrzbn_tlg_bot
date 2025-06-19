@@ -1,5 +1,3 @@
-import argparse
-import configparser
 import logging
 import random
 from datetime import datetime
@@ -9,11 +7,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 
 from util.ex_time_calc import get_exp_for_new_user, get_exp_time_based_on_prev
 from proxy.mrzbn_proxy import MrzbnProxy
+from config.config import Config
 
-# parsing config
-parser = argparse.ArgumentParser()
-parser.add_argument('--settings', dest='settings', type=str, help='Specify settings file path')
-args = parser.parse_args()
+# config
+config = Config()
 
 # logger
 logging.basicConfig(
@@ -22,16 +19,12 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
-# config
-config = configparser.ConfigParser()
-config.read(args.settings)
-
 # envs
-base_url = config["MRZBN"]["ENDPOINT"]
-admin = {"id": config["ADMIN"]["ID"], "chat": config["ADMIN"]["CHAT"]}
-card_number = config["CARD"]["NUM"]
+base_url = config.get_proxy_base_url()
+admin = {"id": config.get_admin_id(), "chat": config.get_admin_chat_id()}
+card_number = config.get_card_code()
 
-proxy = MrzbnProxy(base_url=base_url, username=config["MRZBN"]["USER"], password=config["MRZBN"]["PASS"], logger=logger)
+proxy = MrzbnProxy(base_url=base_url, username=config.get_proxy_admin_user(), password=config.get_proxy_admin_pass(), logger=logger)
 
 NEW, PROCESSING = range(2)
 
@@ -146,7 +139,7 @@ async def manage_payment(app: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(config["TELEGRAM"]["TOKEN"]).build()
+    app = ApplicationBuilder().token(config.get_tg_token()).build()
     app.add_handler(CommandHandler("start", info))
     app.add_handler(CommandHandler("pay", pay))
     app.add_handler(CommandHandler("status", check_user_status))
