@@ -1,13 +1,15 @@
 import logging
 import random
 from datetime import datetime
+
 from telegram import KeyboardButton, ReplyKeyboardMarkup, Update
-from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-from util.ex_time_calc import get_exp_for_new_user, get_exp_time_based_on_prev
-from proxy.mrzbn_proxy import MrzbnProxy
 from config.config import Config
+from proxy.mrzbn_proxy import MrzbnProxy
+from storage.repo.task_repo import TaskRepo
+from storage.config.conn import Conn
+from util.ex_time_calc import get_exp_for_new_user, get_exp_time_based_on_prev
 
 # config
 config = Config()
@@ -20,18 +22,26 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 # envs
-app_timezone = config.get_timezone()
-base_url = config.get_proxy_base_url()
-admin = {"id": config.get_admin_id(), "chat": config.get_admin_chat_id()}
-card_number = config.get_card_code()
+app_timezone = config.timezone
+base_url = config.proxy_base_url
+admin = {"id": config.admin_id, "chat": config.admin_chat_id}
+card_number = config.card_code
+parse_mode = config.tg_parser_mode
 
-proxy = MrzbnProxy(base_url=base_url, username=config.get_proxy_admin_user(), password=config.get_proxy_admin_pass(), logger=logger)
+# proxy
+proxy = MrzbnProxy(base_url=base_url,
+                   username=config.proxy_admin_user,
+                   password=config.proxy_admin_pass,
+                   logger=logger)
+
+# db
+conn = Conn(config.db_name, config.db_host, config.db_port, config.db_user, config.db_pass)
+repo = TaskRepo(conn, config.timezone)
 
 NEW, PROCESSING = range(2)
 
 p_user_tasks = []
 
-parse_mode = ParseMode.MARKDOWN_V2
 
 ##########################################################################################################################
 #                                                    Bot commands                                                        #
@@ -76,7 +86,8 @@ async def check_user_expiration_time(update: Update, context: ContextTypes.DEFAU
 async def get_sub_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_info = await proxy.check_and_get_user(user_id=str(context._user_id))
     if user_info is not None:
-        await update.message.reply_text(f'Your link is `{base_url + user_info.subscription_url}`', parse_mode=parse_mode)
+        await update.message.reply_text(f'Your link is `{base_url + user_info.subscription_url}`',
+                                        parse_mode=parse_mode)
     else:
         await update.message.reply_text('Can\'t find your account! Maybe it\'s expired?')
 
@@ -118,7 +129,8 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 if user is None:
                     user = await proxy.create_new_user(user_id=user_id, ex_time=get_exp_for_new_user(1, app_timezone))
                 else:
-                    await proxy.update_user_ex_time(user_id=user_id, ex_time=get_exp_time_based_on_prev(1, user.expire, app_timezone))
+                    await proxy.update_user_ex_time(user_id=user_id,
+                                                    ex_time=get_exp_time_based_on_prev(1, user.expire, app_timezone))
                 await context.bot.send_message(user_task["chat"],
                                                f'Admin approved your transaction\\! Here\'s your connection link `{base_url + user.subscription_url}`\nEnjoy\\!',
                                                parse_mode=parse_mode)
@@ -140,7 +152,7 @@ async def manage_payment(app: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(config.get_tg_token()).build()
+    app = ApplicationBuilder().token(config.tg_token).build()
     app.add_handler(CommandHandler("start", info))
     app.add_handler(CommandHandler("pay", pay))
     app.add_handler(CommandHandler("status", check_user_status))
