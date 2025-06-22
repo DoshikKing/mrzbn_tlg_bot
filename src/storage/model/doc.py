@@ -1,16 +1,17 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 class Document(ABC):
     @abstractmethod
-    def __init__(self, modified, retro):
+    def __init__(self, doc_id, retro):
+        self.doc_id = doc_id
+        self.modified = None
         self.retro = retro
-        self.modified = modified
-        pass
 
-    def modify(self, modified):
-        self.modified = modified
-        return modified
+    def modify(self, app_timezone):
+        self.modified = datetime.now(app_timezone)
+        return self.modified
 
     def to_retro(self, retro):
         self.retro = retro
-        return retro
+        return self.retro

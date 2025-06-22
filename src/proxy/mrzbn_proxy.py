@@ -6,7 +6,13 @@ from .proxy import Proxy
 
 
 class MrzbnProxy(Proxy):
-    def __init__(self, base_url: str, username: str, password: str, logger: Logger):
+    def __init__(
+            self,
+            base_url: str,
+            username: str,
+            password: str,
+            logger: Logger
+    ):
         self.client = MarzbanAPI(base_url=base_url)
         self.token = MarzbanTokenCache(client=self.client,
                                        username=username, password=password,

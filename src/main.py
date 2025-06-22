@@ -20,6 +20,7 @@ logging.getLogger("httpx").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 # envs
+app_timezone = config.get_timezone()
 base_url = config.get_proxy_base_url()
 admin = {"id": config.get_admin_id(), "chat": config.get_admin_chat_id()}
 card_number = config.get_card_code()
@@ -115,9 +116,9 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 user_id = user_task["id"]
                 user = await proxy.check_and_get_user(user_id=user_id)
                 if user is None:
-                    user = await proxy.create_new_user(user_id=user_id, ex_time=get_exp_for_new_user(1))
+                    user = await proxy.create_new_user(user_id=user_id, ex_time=get_exp_for_new_user(1, app_timezone))
                 else:
-                    await proxy.update_user_ex_time(user_id=user_id, ex_time=get_exp_time_based_on_prev(1, user.expire))
+                    await proxy.update_user_ex_time(user_id=user_id, ex_time=get_exp_time_based_on_prev(1, user.expire, app_timezone))
                 await context.bot.send_message(user_task["chat"],
                                                f'Admin approved your transaction\\! Here\'s your connection link `{base_url + user.subscription_url}`\nEnjoy\\!',
                                                parse_mode=parse_mode)
@@ -131,7 +132,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 ##########################################################################################################################
 async def manage_payment(app: ContextTypes.DEFAULT_TYPE):
     for user_task in p_user_tasks:
-        if (user_task["status"] == NEW):
+        if user_task["status"] == NEW:
             user_task["status"] = PROCESSING
             await app.bot.send_message(admin["chat"],
                                        f'User {user_task["id"]} payed with code `{user_task["code"]}`\\. Type code to permit\\.\\.',
